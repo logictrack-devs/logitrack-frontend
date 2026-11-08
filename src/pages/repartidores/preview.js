@@ -1,5 +1,5 @@
 
-import { renderRepartidores } from './index.js';
+import { renderRepartidores } from './demo.js';
 
 // Datos ficticios para probar la pantalla.
 // Más adelante los reemplazaremos por datos reales de Courier.

@@ -1,272 +1,164 @@
+import { http } from '../../api/http.js';
+import { hasRole } from '../../auth/session.js';
+import { toast } from '../../ui/toast.js';
 
-import './repartidores.css';
-import { abrirFormularioRepartidor } from './formulario.js';
-const POR_PAGINA = 5;
+export async function renderRepartidores(container) {
+    const isAdmin = hasRole('ADMIN');
 
-export function renderRepartidores(container, opciones = {}) {
-    let datos = opciones.repartidores ?? [];
-    let pagina = 1;
-
-    // Construimos la estructura HTML de la pantalla.
     container.innerHTML = `
-    <section class="rep-modulo">
-      <header class="rep-encabezado">
-        <div>
-          <p>LOGITRACK / COURIER</p>
-          <h1>Gestión de repartidores</h1>
-          <p>Consultá y administrá los repartidores.</p>
+        <div class="page-container">
+            <div class="page-header">
+                <div>
+                    <h2>🛵 Gestión de Repartidores</h2>
+                    <p class="subtitle">Consulta de disponibilidad y estado de repartidores activos</p>
+                </div>
+                ${isAdmin ? `
+                    <button id="btn-nuevo-repartidor" class="btn btn-primary">
+                        + Registrar Repartidor
+                    </button>
+                ` : ''}
+            </div>
+
+            <div id="repartidores-loading" class="loading-state">
+                Cargando lista de repartidores...
+            </div>
+
+            <div id="repartidores-content" class="table-card hidden">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Tipo Vehículo</th>
+                            <th>Estado</th>
+                            <th>ID del Repartidor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="repartidores-tbody"></tbody>
+                </table>
+            </div>
+
+            <div id="repartidores-empty" class="empty-state hidden">
+                <p>No se encontraron repartidores registrados o disponibles.</p>
+            </div>
         </div>
-        <button type="button" id="rep-nuevo">+ Nuevo repartidor</button>
-      </header>
 
-      <p class="rep-aviso">
-        Vista de prueba con datos ficticios.
-      </p>
-
-      <div class="rep-panel">
-        <div class="rep-filtros">
-          <label>
-            Buscar repartidor
-            <input
-              id="rep-buscar"
-              type="search"
-              placeholder="Nombre o vehículo"
-            />
-          </label>
-
-          <label>
-            Estado
-            <select id="rep-estado">
-              <option value="TODOS">Todos</option>
-              <option value="ACTIVO">Activo</option>
-              <option value="INACTIVO">Inactivo</option>
-            </select>
-          </label>
+        <!-- Modal Registrar Repartidor (Solo ADMIN) -->
+        <div id="modal-repartidor" class="modal-overlay hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Registrar Nuevo Repartidor</h3>
+                    <button class="modal-close-btn" id="close-modal-repartidor">&times;</button>
+                </div>
+                <form id="form-nuevo-repartidor" class="modal-body">
+                    <div class="form-group">
+                        <label for="rep-nombre">Nombre Completo *</label>
+                        <input type="text" id="rep-nombre" required placeholder="Ej: Carlos Gómez" />
+                    </div>
+                    <div class="form-group">
+                        <label for="rep-vehiculo">Tipo de Vehículo *</label>
+                        <select id="rep-vehiculo" required>
+                            <option value="MOTO">Moto 🏍️</option>
+                            <option value="BICICLETA">Bicicleta 🚲</option>
+                            <option value="AUTO">Auto 🚗</option>
+                            <option value="CAMIONETA">Camioneta 🚚</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-repartidor">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Guardar</button>
+                    </div>
+                </form>
+            </div>
         </div>
+    `;
 
-        <table class="rep-tabla">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Vehículo</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="rep-filas"></tbody>
-        </table>
+    const loadingEl = container.querySelector('#repartidores-loading');
+    const contentEl = container.querySelector('#repartidores-content');
+    const tbody = container.querySelector('#repartidores-tbody');
+    const emptyEl = container.querySelector('#repartidores-empty');
 
-        <footer class="rep-paginacion">
-          <span id="rep-resumen"></span>
-          <div>
-            <button id="rep-anterior">Anterior</button>
-            <span id="rep-pagina"></span>
-            <button id="rep-siguiente">Siguiente</button>
-          </div>
-        </footer>
-      </div>
-    </section>
-  `;
+    async function cargarRepartidores() {
+        loadingEl.classList.remove('hidden');
+        contentEl.classList.add('hidden');
+        emptyEl.classList.add('hidden');
 
-    const buscar = container.querySelector('#rep-buscar');
-    const filtro = container.querySelector('#rep-estado');
-    const filas = container.querySelector('#rep-filas');
-    const resumen = container.querySelector('#rep-resumen');
-    const paginaTexto = container.querySelector('#rep-pagina');
-    const anterior = container.querySelector('#rep-anterior');
-    const siguiente = container.querySelector('#rep-siguiente');
-    const nuevo = container.querySelector('#rep-nuevo');
-    // Agrega una celda a la tabla de forma segura.
-    function agregarCelda(fila, valor) {
-        const celda = document.createElement('td');
-        celda.textContent = String(valor ?? '—');
-        fila.appendChild(celda);
-    }
+        try {
+            // Intentar traer los disponibles primero
+            const repartidores = await http.get('/applications/apicourier/api/v1/repartidores/disponibles');
 
-    // Actualiza la tabla según la búsqueda, filtro y página.
-    function mostrarRepartidores() {
-        const texto = buscar.value.toLowerCase().trim();
-        const estado = filtro.value;
+            loadingEl.classList.add('hidden');
 
-        const filtrados = datos.filter((repartidor) => {
-            const nombre = String(repartidor.nombre ?? '').toLowerCase();
-            const vehiculo = String(repartidor.tipoVehiculo ?? '').toLowerCase();
+            if (!Array.isArray(repartidores) || repartidores.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            }
 
-            const coincideBusqueda =
-                nombre.includes(texto) || vehiculo.includes(texto);
+            tbody.innerHTML = repartidores.map(r => `
+                <tr>
+                    <td><strong>${escapeHtml(r.nombre || 'Sin nombre')}</strong></td>
+                    <td>${escapeHtml(r.tipoVehiculo || 'No especificado')}</td>
+                    <td>
+                        <span class="badge ${r.estado === 'ACTIVO' ? 'badge-success' : 'badge-warning'}">
+                            ${r.estado || 'DESCONOCIDO'}
+                        </span>
+                    </td>
+                    <td><code class="uuid-chip">${r.id}</code></td>
+                </tr>
+            `).join('');
 
-            const coincideEstado =
-                estado === 'TODOS' || repartidor.estado === estado;
+            contentEl.classList.remove('hidden');
 
-            return coincideBusqueda && coincideEstado;
-        });
-
-        const totalPaginas = Math.max(
-            1,
-            Math.ceil(filtrados.length / POR_PAGINA)
-        );
-
-        pagina = Math.min(pagina, totalPaginas);
-
-        const inicio = (pagina - 1) * POR_PAGINA;
-        const visibles = filtrados.slice(inicio, inicio + POR_PAGINA);
-
-        filas.replaceChildren();
-
-        if (visibles.length === 0) {
-            const fila = document.createElement('tr');
-            const celda = document.createElement('td');
-            celda.colSpan = 5;
-            celda.textContent = 'No se encontraron repartidores.';
-            fila.appendChild(celda);
-            filas.appendChild(fila);
+        } catch (err) {
+            loadingEl.classList.add('hidden');
+            emptyEl.classList.remove('hidden');
+            emptyEl.innerHTML = `<p class="error-text">No se pudo cargar repartidores: ${escapeHtml(err.message)}</p>`;
         }
-
-        visibles.forEach((repartidor) => {
-            const fila = document.createElement('tr');
-
-            agregarCelda(fila, repartidor.id);
-            agregarCelda(fila, repartidor.nombre);
-            agregarCelda(fila, repartidor.tipoVehiculo);
-            agregarCelda(fila, repartidor.estado);
-
-            const acciones = document.createElement('td');
-
-
-            const editar = document.createElement('button');
-            editar.textContent = 'Editar';
-
-            editar.addEventListener('click', () => {
-                abrirFormularioRepartidor({
-                    repartidor: repartidor,
-
-                    onGuardar: async (datosFormulario) => {
-
-                        // Buscamos al repartidor por su ID y actualizamos sus datos.
-                        datos = datos.map((r) => {
-                            if (r.id === repartidor.id) {
-                                return {
-                                    ...r,
-                                    nombre: datosFormulario.nombre,
-                                    tipoVehiculo: datosFormulario.tipoVehiculo
-                                };
-                            }
-
-                            return r;
-                        });
-
-                        // Actualizamos la tabla.
-                        mostrarRepartidores();
-                    }
-                });
-            });
-
-
-
-            const cambiarEstado = document.createElement('button');
-
-            cambiarEstado.textContent =
-                repartidor.estado === 'ACTIVO' ? 'Desactivar' : 'Activar';
-
-            cambiarEstado.addEventListener('click', () => {
-                // Determinamos cuál será el nuevo estado.
-                const nuevoEstado =
-                    repartidor.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
-
-                // Buscamos al repartidor por su ID y cambiamos su estado.
-                datos = datos.map((r) => {
-                    if (r.id === repartidor.id) {
-                        return {
-                            ...r,
-                            estado: nuevoEstado
-                        };
-                    }
-
-                    return r;
-                });
-
-                // Actualizamos la tabla para mostrar el cambio.
-                mostrarRepartidores();
-            });
-
-
-            acciones.append(editar, cambiarEstado);
-            fila.appendChild(acciones);
-
-            filas.appendChild(fila);
-        });
-
-        resumen.textContent = `${filtrados.length} repartidores encontrados`;
-        paginaTexto.textContent = `Página ${pagina} de ${totalPaginas}`;
-
-        anterior.disabled = pagina === 1;
-        siguiente.disabled = pagina === totalPaginas;
     }
 
+    // Modal nuevo repartidor
+    if (isAdmin) {
+        const modal = container.querySelector('#modal-repartidor');
+        const openBtn = container.querySelector('#btn-nuevo-repartidor');
+        const closeBtn = container.querySelector('#close-modal-repartidor');
+        const cancelBtn = container.querySelector('#cancel-repartidor');
+        const form = container.querySelector('#form-nuevo-repartidor');
 
-    // Abrir formulario para registrar un repartidor.
-    nuevo.addEventListener('click', () => {
-        abrirFormularioRepartidor({
-            onGuardar: async (datosFormulario) => {
+        const openModal = () => modal.classList.remove('hidden');
+        const closeModal = () => {
+            modal.classList.add('hidden');
+            form.reset();
+        };
 
-                // Generamos un ID para el dato ficticio.
-                const nuevoId = Math.max(
-                    0,
-                    ...datos.map(r => Number(r.id) || 0)
-                ) + 1;
+        openBtn?.addEventListener('click', openModal);
+        closeBtn?.addEventListener('click', closeModal);
+        cancelBtn?.addEventListener('click', closeModal);
 
-                // Agregamos el repartidor a la lista local.
-                datos = [
-                    {
-                        id: nuevoId,
-                        nombre: datosFormulario.nombre,
-                        tipoVehiculo: datosFormulario.tipoVehiculo,
-                        estado: 'ACTIVO'
-                    },
-                    ...datos
-                ];
+        form?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const nombre = container.querySelector('#rep-nombre').value.trim();
+            const tipoVehiculo = container.querySelector('#rep-vehiculo').value;
 
-                // Limpiamos filtros para mostrar el nuevo registro.
-                buscar.value = '';
-                filtro.value = 'TODOS';
-                pagina = 1;
+            try {
+                await http.post('/applications/apicourier/api/v1/repartidores', {
+                    nombre,
+                    tipoVehiculo
+                });
 
-                // Actualizamos la tabla.
-                mostrarRepartidores();
+                toast.success('Repartidor registrado exitosamente.');
+                closeModal();
+                cargarRepartidores();
+            } catch (err) {
+                console.error('Error registrando repartidor:', err);
             }
         });
-    });
+    }
 
+    cargarRepartidores();
+}
 
-    buscar.addEventListener('input', () => {
-        pagina = 1;
-        mostrarRepartidores();
-    });
-
-    filtro.addEventListener('change', () => {
-        pagina = 1;
-        mostrarRepartidores();
-    });
-
-    anterior.addEventListener('click', () => {
-        pagina--;
-        mostrarRepartidores();
-    });
-
-    siguiente.addEventListener('click', () => {
-        pagina++;
-        mostrarRepartidores();
-    });
-
-    mostrarRepartidores();
-
-    // Permitirá actualizar los datos cuando conectemos Courier.
-    return {
-        setRepartidores(nuevosDatos) {
-            datos = Array.isArray(nuevosDatos) ? nuevosDatos : [];
-            pagina = 1;
-            mostrarRepartidores();
-        }
-    };
+function escapeHtml(str) {
+    if (!str) return '';
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
 }
