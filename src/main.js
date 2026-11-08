@@ -1,10 +1,11 @@
 import './style.css';
+import { initSession } from './auth/session.js';
+import { initRouter } from './router.js';
 
-document.querySelector('#app').innerHTML = `
-  <main class="container">
-    <h1>LogiTrack</h1>
-    <h2>Sprint 4 - Frontend</h2>
-    <p>Sistema de gestión de envíos y repartidores.</p>
-    <p>Frontend inicializado correctamente.</p>
-  </main>
-`;
+console.info('🚀 Inicializando LogiTrack Frontend...');
+
+// 1. Inicializa el ciclo de vida de la sesión (timers de vencimiento automático)
+initSession();
+
+// 2. Inicializa el enrutador SPA por hash (#/login, #/envios, #/repartidores, #/sinacceso)
+initRouter();
