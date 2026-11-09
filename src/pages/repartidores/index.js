@@ -103,6 +103,8 @@ export async function renderRepartidores(container) {
                         </span>
                     </td>
                     <td><code class="uuid-chip">${r.id}</code></td>
+                    <!-- 📂 ESPACIO PARA VALENTINA: Aquí ella agregará la columna con los botones de acción -->
+                    
                 </tr>
             `).join('');
 
