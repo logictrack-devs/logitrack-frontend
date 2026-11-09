@@ -2,7 +2,7 @@ import { getToken, logout } from '../auth/session.js';
 import { toast } from '../ui/toast.js';
 
 // URL base del API Gateway
-export const API_BASE_URL = 'http://localhost:8066';
+export const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8066' : '');
 
 /**
  * Cliente HTTP personalizado con:
