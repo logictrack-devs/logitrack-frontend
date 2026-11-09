@@ -1,80 +1,42 @@
 
-const COURIER_URL =
-    'http://localhost:8066/applications/apicourier/api/v1/repartidores';
+import { http } from '../../api/http.js';
 
-// Función reutilizable para comunicarnos con Courier.
-async function peticionCourier(ruta, token, opciones = {}) {
-    if (!token) {
-        throw new Error('No hay una sesión iniciada.');
-    }
-
-    const respuesta = await fetch(`${COURIER_URL}${ruta}`, {
-        ...opciones,
-        headers: {
-            Accept: 'application/json',
-            Authorization: `Bearer ${token}`,
-            ...(opciones.body ? { 'Content-Type': 'application/json' } : {})
-        }
-    });
-
-    // Leemos la respuesta del backend.
-    const resultado = await respuesta.json().catch(() => null);
-
-    if (respuesta.status === 401) {
-        throw new Error('La sesión venció. Iniciá sesión nuevamente.');
-    }
-
-    if (respuesta.status === 403) {
-        throw new Error('No tenés permisos para realizar esta operación.');
-    }
-
-    if (!respuesta.ok) {
-        throw new Error(
-            resultado?.mensaje ||
-            resultado?.message ||
-            `Error de Courier: ${respuesta.status}`
-        );
-    }
-
-    return resultado;
-}
+// Ruta de repartidores a través de API Gateway.
+const REPARTIDORES_URL =
+    '/applications/apicourier/api/v1/repartidores';
 
 // GET: listar repartidores con paginación.
-export function listarRepartidores(token, pagina = 0, tamanio = 5) {
+export function listarRepartidores(pagina = 0, tamanio = 5) {
     const parametros = new URLSearchParams({
         page: String(pagina),
         size: String(tamanio)
     });
 
-    return peticionCourier(`/paginado?${parametros}`, token);
+    return http.get(`${REPARTIDORES_URL}/paginado?${parametros}`);
 }
 
-// GET: consultar repartidores disponibles.
-export function listarDisponibles(token) {
-    return peticionCourier('/disponibles', token);
+// GET: obtener repartidores disponibles.
+export function listarDisponibles() {
+    return http.get(`${REPARTIDORES_URL}/disponibles`);
 }
 
-// POST: registrar un nuevo repartidor.
-export function registrarRepartidor(token, datos) {
-    return peticionCourier('', token, {
-        method: 'POST',
-        body: JSON.stringify(datos)
-    });
+// POST: registrar un repartidor.
+export function registrarRepartidor(datos) {
+    return http.post(REPARTIDORES_URL, datos);
 }
 
-// PUT: modificar nombre y vehículo.
-export function editarRepartidor(token, id, datos) {
-    return peticionCourier(`/${encodeURIComponent(id)}`, token, {
-        method: 'PUT',
-        body: JSON.stringify(datos)
-    });
+// PUT: editar un repartidor existente.
+export function editarRepartidor(id, datos) {
+    return http.put(
+        `${REPARTIDORES_URL}/${encodeURIComponent(id)}`,
+        datos
+    );
 }
 
-// PATCH: cambiar estado del repartidor.
-export function cambiarEstadoRepartidor(token, id, estado) {
-    return peticionCourier(
-        `/${encodeURIComponent(id)}/estado?estado=${encodeURIComponent(estado)}`,
-        token,
-        { method: 'PATCH' }
+// PATCH: activar o desactivar un repartidor.
+export function cambiarEstadoRepartidor(id, estado) {
+    return http.patch(
+        `${REPARTIDORES_URL}/${encodeURIComponent(id)}/estado?estado=${encodeURIComponent(estado)}`,
+        null
     );
 }
