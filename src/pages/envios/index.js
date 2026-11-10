@@ -91,7 +91,7 @@ export function renderEnvios(container) {
              PANTALLA 2: Modal Registrar Envío (JSON Body)
              ============================================================ -->
         <div id="modal-nuevo-envio" class="modal-overlay hidden">
-            <div class="modal-card modal-lg">
+            <div class="modal-card modal-xl">
                 <div class="modal-header">
                     <h3>📦 Registrar Nuevo Envío</h3>
                     <button class="modal-close-btn" id="close-modal-envio">&times;</button>
@@ -110,73 +110,77 @@ export function renderEnvios(container) {
                         <small class="field-hint">UUID del cliente registrado en el sistema</small>
                     </div>
 
-                    <!-- Dimensiones y Peso -->
+                    <!-- Dimensiones y Peso en 4 columnas -->
                     <div class="form-section-title">📐 Dimensiones del Paquete</div>
-                    <div class="form-row">
-                        <div class="form-group col-half">
+                    <div class="form-row-4">
+                        <div class="form-group">
                             <label for="env-peso">Peso (kg) *</label>
                             <input type="number" id="env-peso" step="0.1" min="0.1" required placeholder="5.0" />
                         </div>
-                        <div class="form-group col-half">
+                        <div class="form-group">
+                            <label for="env-largo">Largo (cm) *</label>
+                            <input type="number" id="env-largo" step="0.1" min="1" required placeholder="30.0" />
+                        </div>
+                        <div class="form-group">
+                            <label for="env-ancho">Ancho (cm) *</label>
+                            <input type="number" id="env-ancho" step="0.1" min="1" required placeholder="15.0" />
+                        </div>
+                        <div class="form-group">
                             <label for="env-alto">Alto (cm) *</label>
                             <input type="number" id="env-alto" step="0.1" min="1" required placeholder="20.0" />
                         </div>
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-group col-half">
-                            <label for="env-ancho">Ancho (cm) *</label>
-                            <input type="number" id="env-ancho" step="0.1" min="1" required placeholder="15.0" />
+                    <!-- 2 Columnas paralelas: Origen y Destino -->
+                    <div class="form-grid-2col">
+                        <!-- Columna Izquierda: Origen -->
+                        <div class="form-col-box">
+                            <div class="form-section-title" style="margin-top:0;">📍 Dirección de Origen</div>
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 2;">
+                                    <label for="orig-calle">Calle *</label>
+                                    <input type="text" id="orig-calle" required placeholder="Ej: Av. Belgrano" />
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label for="orig-numero">Número *</label>
+                                    <input type="text" id="orig-numero" required placeholder="450" />
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group col-half">
+                                    <label for="orig-ciudad">Ciudad *</label>
+                                    <input type="text" id="orig-ciudad" required placeholder="San Salvador de Jujuy" />
+                                </div>
+                                <div class="form-group col-half">
+                                    <label for="orig-cp">Código Postal *</label>
+                                    <input type="text" id="orig-cp" required placeholder="4600" />
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group col-half">
-                            <label for="env-largo">Largo (cm) *</label>
-                            <input type="number" id="env-largo" step="0.1" min="1" required placeholder="30.0" />
-                        </div>
-                    </div>
 
-                    <!-- Dirección de Origen -->
-                    <div class="form-section-title">📍 Dirección de Origen</div>
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 2;">
-                            <label for="orig-calle">Calle *</label>
-                            <input type="text" id="orig-calle" required placeholder="Ej: Av. Belgrano" />
-                        </div>
-                        <div class="form-group" style="flex: 1;">
-                            <label for="orig-numero">Número *</label>
-                            <input type="text" id="orig-numero" required placeholder="450" />
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-half">
-                            <label for="orig-ciudad">Ciudad *</label>
-                            <input type="text" id="orig-ciudad" required placeholder="San Salvador de Jujuy" />
-                        </div>
-                        <div class="form-group col-half">
-                            <label for="orig-cp">Código Postal *</label>
-                            <input type="text" id="orig-cp" required placeholder="4600" />
-                        </div>
-                    </div>
-
-                    <!-- Dirección de Destino -->
-                    <div class="form-section-title">🏁 Dirección de Destino</div>
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 2;">
-                            <label for="dest-calle">Calle *</label>
-                            <input type="text" id="dest-calle" required placeholder="Ej: Necochea" />
-                        </div>
-                        <div class="form-group" style="flex: 1;">
-                            <label for="dest-numero">Número *</label>
-                            <input type="text" id="dest-numero" required placeholder="1025" />
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group col-half">
-                            <label for="dest-ciudad">Ciudad *</label>
-                            <input type="text" id="dest-ciudad" required placeholder="San Salvador de Jujuy" />
-                        </div>
-                        <div class="form-group col-half">
-                            <label for="dest-cp">Código Postal *</label>
-                            <input type="text" id="dest-cp" required placeholder="4600" />
+                        <!-- Columna Derecha: Destino -->
+                        <div class="form-col-box">
+                            <div class="form-section-title" style="margin-top:0;">🏁 Dirección de Destino</div>
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 2;">
+                                    <label for="dest-calle">Calle *</label>
+                                    <input type="text" id="dest-calle" required placeholder="Ej: Necochea" />
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label for="dest-numero">Número *</label>
+                                    <input type="text" id="dest-numero" required placeholder="1025" />
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group col-half">
+                                    <label for="dest-ciudad">Ciudad *</label>
+                                    <input type="text" id="dest-ciudad" required placeholder="San Salvador de Jujuy" />
+                                </div>
+                                <div class="form-group col-half">
+                                    <label for="dest-cp">Código Postal *</label>
+                                    <input type="text" id="dest-cp" required placeholder="4600" />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
