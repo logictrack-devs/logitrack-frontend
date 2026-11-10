@@ -5,8 +5,18 @@ import { toast } from '../../ui/toast.js';
 let filtroActual = 'TODOS';
 let enviosCache = [];
 
+/**
+ * Módulo de Gestión de Envíos (Sprint 4 - FE-5)
+ * Implementa las 6 pantallas / flujos requeridos:
+ * 1. Listado de envíos con filtros y tarifa
+ * 2. Registrar nuevo envío (JSON en Body con origen y destino)
+ * 3. Detalle completo de envío e historial de trazabilidad
+ * 4. Asignar repartidor disponible (Solo ADMIN)
+ * 5. Cambiar estado (PENDIENTE -> EN_RUTA -> ENTREGADO)
+ * 6. Cancelar envío (POST /{id}/cancelar con manejo de 409)
+ */
 export function renderEnvios(container) {
-    const user = getUser();
+    const user = getUser() || { username: 'Usuario', roles: [] };
     const isAdmin = hasRole('ADMIN');
     const isRepartidor = hasRole('REPARTIDOR');
     const isCliente = hasRole('CLIENTE');
@@ -31,7 +41,7 @@ export function renderEnvios(container) {
                 </div>
             </div>
 
-            <!-- Barra de Filtros por Estado -->
+            <!-- Pantalla 1: Filtro por Estado -->
             <div class="filters-bar">
                 <span class="filter-label">Filtrar por estado:</span>
                 <div class="filter-tabs">
@@ -49,16 +59,17 @@ export function renderEnvios(container) {
                 <p>Cargando envíos desde el servicio...</p>
             </div>
 
-            <!-- Tabla de Envíos -->
+            <!-- Pantalla 1: Tabla de Envíos -->
             <div id="envios-card" class="table-card hidden">
                 <div class="table-responsive">
                     <table class="data-table">
                         <thead>
                             <tr>
                                 <th>Código</th>
-                                <th>Cliente</th>
-                                <th>Dimensiones & Peso</th>
                                 <th>Estado</th>
+                                <th>Cliente / Destino</th>
+                                <th>Tarifa</th>
+                                <th>Dimensiones & Peso</th>
                                 <th>Repartidor</th>
                                 <th>Acciones</th>
                             </tr>
@@ -68,7 +79,7 @@ export function renderEnvios(container) {
                 </div>
             </div>
 
-            <!-- Estado Vacío -->
+            <!-- Pantalla 1: Estado Vacío -->
             <div id="envios-empty" class="empty-state hidden">
                 <div class="empty-icon">📭</div>
                 <h3>No hay envíos para mostrar</h3>
@@ -76,29 +87,35 @@ export function renderEnvios(container) {
             </div>
         </div>
 
-        <!-- MODAL: Nuevo Envío -->
+        <!-- ============================================================
+             PANTALLA 2: Modal Registrar Envío (JSON Body)
+             ============================================================ -->
         <div id="modal-nuevo-envio" class="modal-overlay hidden">
-            <div class="modal-card">
+            <div class="modal-card modal-lg">
                 <div class="modal-header">
-                    <h3>Nuevo Registro de Envío</h3>
+                    <h3>📦 Registrar Nuevo Envío</h3>
                     <button class="modal-close-btn" id="close-modal-envio">&times;</button>
                 </div>
                 <form id="form-nuevo-envio" class="modal-body">
+                    <!-- Cliente solicitante -->
                     <div class="form-group">
-                        <label for="env-cliente-id">UUID del Cliente *</label>
+                        <label for="env-cliente-id">Identificador del Cliente (UUID) *</label>
                         <input 
                             type="text" 
                             id="env-cliente-id" 
                             required 
                             placeholder="Ej: d8b2c450-4d51-40ff-9ab0-cb3e7784f18a"
+                            ${!isAdmin ? 'placeholder="Se vinculará a tu cuenta de cliente"' : ''}
                         />
-                        <small class="field-hint">Identificador único del cliente solicitante</small>
+                        <small class="field-hint">UUID del cliente registrado en el sistema</small>
                     </div>
 
+                    <!-- Dimensiones y Peso -->
+                    <div class="form-section-title">📐 Dimensiones del Paquete</div>
                     <div class="form-row">
                         <div class="form-group col-half">
                             <label for="env-peso">Peso (kg) *</label>
-                            <input type="number" id="env-peso" step="0.1" min="0.1" required placeholder="5.5" />
+                            <input type="number" id="env-peso" step="0.1" min="0.1" required placeholder="5.0" />
                         </div>
                         <div class="form-group col-half">
                             <label for="env-alto">Alto (cm) *</label>
@@ -117,19 +134,88 @@ export function renderEnvios(container) {
                         </div>
                     </div>
 
+                    <!-- Dirección de Origen -->
+                    <div class="form-section-title">📍 Dirección de Origen</div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label for="orig-calle">Calle *</label>
+                            <input type="text" id="orig-calle" required placeholder="Ej: Av. Belgrano" />
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="orig-numero">Número *</label>
+                            <input type="text" id="orig-numero" required placeholder="450" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label for="orig-ciudad">Ciudad *</label>
+                            <input type="text" id="orig-ciudad" required placeholder="San Salvador de Jujuy" />
+                        </div>
+                        <div class="form-group col-half">
+                            <label for="orig-cp">Código Postal *</label>
+                            <input type="text" id="orig-cp" required placeholder="4600" />
+                        </div>
+                    </div>
+
+                    <!-- Dirección de Destino -->
+                    <div class="form-section-title">🏁 Dirección de Destino</div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label for="dest-calle">Calle *</label>
+                            <input type="text" id="dest-calle" required placeholder="Ej: Necochea" />
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="dest-numero">Número *</label>
+                            <input type="text" id="dest-numero" required placeholder="1025" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col-half">
+                            <label for="dest-ciudad">Ciudad *</label>
+                            <input type="text" id="dest-ciudad" required placeholder="San Salvador de Jujuy" />
+                        </div>
+                        <div class="form-group col-half">
+                            <label for="dest-cp">Código Postal *</label>
+                            <input type="text" id="dest-cp" required placeholder="4600" />
+                        </div>
+                    </div>
+
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary" id="cancel-nuevo-envio">Cancelar</button>
-                        <button type="submit" class="btn btn-primary" id="btn-submit-envio">Crear Envío</button>
+                        <button type="submit" class="btn btn-primary" id="btn-submit-envio">Guardar Envío</button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <!-- MODAL: Asignar Repartidor -->
+        <!-- ============================================================
+             PANTALLA 3: Modal Detalle del Envío con Historial
+             ============================================================ -->
+        <div id="modal-detalle-envio" class="modal-overlay hidden">
+            <div class="modal-card modal-lg">
+                <div class="modal-header">
+                    <h3 id="det-titulo">🔍 Detalle del Envío</h3>
+                    <button class="modal-close-btn" id="close-modal-detalle">&times;</button>
+                </div>
+                <div class="modal-body" id="det-contenido">
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <p>Cargando información del envío...</p>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="close-detalle-btn">Cerrar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             PANTALLA 4: Modal Asignar Repartidor (Solo ADMIN)
+             ============================================================ -->
         <div id="modal-asignar-repartidor" class="modal-overlay hidden">
             <div class="modal-card">
                 <div class="modal-header">
-                    <h3>Asignar Repartidor a Envío</h3>
+                    <h3>🛵 Asignar Repartidor a Envío</h3>
                     <button class="modal-close-btn" id="close-modal-asignar">&times;</button>
                 </div>
                 <form id="form-asignar-repartidor" class="modal-body">
@@ -139,10 +225,11 @@ export function renderEnvios(container) {
                     </p>
 
                     <div class="form-group">
-                        <label for="asig-repartidor-select">Selecciona un Repartidor Activo *</label>
+                        <label for="asig-repartidor-select">Selecciona un Repartidor Disponible (Courier Service) *</label>
                         <select id="asig-repartidor-select" required>
                             <option value="">Cargando repartidores disponibles...</option>
                         </select>
+                        <small class="field-hint">Solo se listan repartidores en estado ACTIVO y disponibles</small>
                     </div>
 
                     <div class="modal-actions">
@@ -152,26 +239,9 @@ export function renderEnvios(container) {
                 </form>
             </div>
         </div>
-
-        <!-- MODAL: Historial de Estados -->
-        <div id="modal-historial" class="modal-overlay hidden">
-            <div class="modal-card modal-lg">
-                <div class="modal-header">
-                    <h3>Historial de Trazabilidad del Envío</h3>
-                    <button class="modal-close-btn" id="close-modal-historial">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div id="historial-meta" class="historial-meta"></div>
-                    <div id="historial-timeline" class="timeline"></div>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="close-historial-btn">Cerrar</button>
-                </div>
-            </div>
-        </div>
     `;
 
-    // Elementos del DOM
+    // Referencias a elementos principales
     const loadingEl = container.querySelector('#envios-loading');
     const tableCard = container.querySelector('#envios-card');
     const tbody = container.querySelector('#envios-tbody');
@@ -179,7 +249,9 @@ export function renderEnvios(container) {
     const btnRefrescar = container.querySelector('#btn-refrescar');
     const filterTabs = container.querySelectorAll('.filter-tab');
 
-    // Cargar envíos desde el backend
+    // ============================================================
+    // PANTALLA 1: Carga y renderizado del Listado de Envíos
+    // ============================================================
     async function cargarEnvios() {
         loadingEl.classList.remove('hidden');
         tableCard.classList.add('hidden');
@@ -193,7 +265,6 @@ export function renderEnvios(container) {
 
             const data = await http.get(url);
             enviosCache = Array.isArray(data) ? data : [];
-
             renderTabla();
 
         } catch (err) {
@@ -222,54 +293,59 @@ export function renderEnvios(container) {
 
         tbody.innerHTML = enviosCache.map(envio => {
             const estadoBadge = getBadgePorEstado(envio.estado);
+            const tarifaFormatted = formatearMoneda(calcularTarifa(envio));
+
+            // Destino o Cliente
+            let destinoInfo = '';
+            if (envio.destino && envio.destino.ciudad) {
+                destinoInfo = `<br><span class="dim-text">📍 ${escapeHtml(envio.destino.ciudad)}</span>`;
+            }
             const clienteLabel = envio.nombreCliente 
-                ? `<strong>${escapeHtml(envio.nombreCliente)}</strong>` 
-                : (envio.clienteId ? `<code class="uuid-chip">${envio.clienteId.substring(0, 8)}...</code>` : '<span class="text-muted">No asignado</span>');
+                ? `<strong>${escapeHtml(envio.nombreCliente)}</strong>${destinoInfo}` 
+                : (envio.clienteId ? `<code class="uuid-chip">${envio.clienteId.substring(0, 8)}...</code>${destinoInfo}` : '<span class="text-muted">No asignado</span>');
 
             const repartidorLabel = envio.repartidorId 
                 ? `🛵 <code class="uuid-chip">${envio.repartidorId.substring(0, 8)}...</code>` 
-                : `<span class="text-muted">Sin repartidor</span>`;
+                : `<span class="text-muted">Sin asignar</span>`;
 
-            // Botones de acción según estado y rol
+            // Acciones según estado y roles
             let accionesHtml = `
-                <button class="btn btn-sm btn-icon btn-historial" data-id="${envio.id}" data-codigo="${envio.codigoSeguimiento}" title="Ver historial">
-                    📋 Historial
+                <button class="btn btn-sm btn-outline btn-detalle" data-id="${envio.id}" title="Ver detalle completo e historial">
+                    🔍 Detalle
                 </button>
             `;
 
-            if (envio.estado === 'PENDIENTE') {
-                if (isAdmin) {
-                    accionesHtml += `
-                        <button class="btn btn-sm btn-outline btn-asignar" data-id="${envio.id}" data-codigo="${envio.codigoSeguimiento}" title="Asignar repartidor">
-                            🛵 Asignar
-                        </button>
-                    `;
-                }
+            // Pantalla 4: Asignar repartidor (Solo ADMIN y estado PENDIENTE)
+            if (envio.estado === 'PENDIENTE' && isAdmin) {
+                accionesHtml += `
+                    <button class="btn btn-sm btn-outline btn-asignar" data-id="${envio.id}" data-codigo="${escapeHtml(envio.codigoSeguimiento)}" title="Asignar repartidor">
+                        🛵 Asignar
+                    </button>
+                `;
+            }
 
-                // Iniciar ruta si ya tiene repartidor asignado
-                if (envio.repartidorId && (isAdmin || isRepartidor)) {
-                    accionesHtml += `
-                        <button class="btn btn-sm btn-info btn-transicionar" data-id="${envio.id}" data-estado="EN_RUTA" title="Poner en ruta">
-                            🚀 A Ruta
-                        </button>
-                    `;
-                }
+            // Pantalla 5: Transiciones de Estado (PENDIENTE -> EN_RUTA -> ENTREGADO)
+            if (envio.estado === 'PENDIENTE' && envio.repartidorId && (isAdmin || isRepartidor)) {
+                accionesHtml += `
+                    <button class="btn btn-sm btn-info btn-transicionar" data-id="${envio.id}" data-estado="EN_RUTA" title="Poner en ruta">
+                        🚀 A Ruta
+                    </button>
+                `;
+            } else if (envio.estado === 'EN_RUTA' && (isAdmin || isRepartidor)) {
+                accionesHtml += `
+                    <button class="btn btn-sm btn-success btn-transicionar" data-id="${envio.id}" data-estado="ENTREGADO" title="Marcar como entregado">
+                        ✅ Entregar
+                    </button>
+                `;
+            }
 
-                if (isAdmin || isCliente) {
-                    accionesHtml += `
-                        <button class="btn btn-sm btn-danger btn-cancelar" data-id="${envio.id}" data-codigo="${envio.codigoSeguimiento}" title="Cancelar envío">
-                            ✕ Cancelar
-                        </button>
-                    `;
-                }
-            } else if (envio.estado === 'EN_RUTA') {
-                if (isAdmin || isRepartidor) {
-                    accionesHtml += `
-                        <button class="btn btn-sm btn-success btn-transicionar" data-id="${envio.id}" data-estado="ENTREGADO" title="Marcar como entregado">
-                            ✅ Entregado
-                        </button>
-                    `;
-                }
+            // Pantalla 6: Cancelar Envío (Solo PENDIENTE, ADMIN o CLIENTE dueño)
+            if (envio.estado === 'PENDIENTE' && (isAdmin || isCliente)) {
+                accionesHtml += `
+                    <button class="btn btn-sm btn-danger btn-cancelar" data-id="${envio.id}" data-codigo="${escapeHtml(envio.codigoSeguimiento)}" title="Cancelar envío">
+                        ✕ Cancelar
+                    </button>
+                `;
             }
 
             return `
@@ -277,12 +353,13 @@ export function renderEnvios(container) {
                     <td>
                         <strong class="tracking-code">${escapeHtml(envio.codigoSeguimiento)}</strong>
                     </td>
+                    <td>${estadoBadge}</td>
                     <td>${clienteLabel}</td>
+                    <td><strong class="table-tariff">${tarifaFormatted}</strong></td>
                     <td>
                         <span class="dim-text">${envio.peso || 0} kg</span> &bull; 
-                        <span class="dim-text">${envio.largo || 0}x${envio.ancho || 0} cm</span>
+                        <span class="dim-text">${envio.largo || 0}x${envio.ancho || 0}x${envio.alto || 0} cm</span>
                     </td>
-                    <td>${estadoBadge}</td>
                     <td>${repartidorLabel}</td>
                     <td class="table-actions">
                         <div class="btn-group">
@@ -293,9 +370,9 @@ export function renderEnvios(container) {
             `;
         }).join('');
 
-        // Vincular eventos de los botones de la tabla
-        tbody.querySelectorAll('.btn-historial').forEach(btn => {
-            btn.addEventListener('click', () => abrirModalHistorial(btn.dataset.id, btn.dataset.codigo));
+        // Vincular eventos de la tabla
+        tbody.querySelectorAll('.btn-detalle').forEach(btn => {
+            btn.addEventListener('click', () => abrirModalDetalle(btn.dataset.id));
         });
 
         tbody.querySelectorAll('.btn-asignar').forEach(btn => {
@@ -323,143 +400,9 @@ export function renderEnvios(container) {
 
     btnRefrescar?.addEventListener('click', () => cargarEnvios());
 
-    // Transición de estado (PATCH /api/v1/envios/{id}/estado)
-    async function transicionarEstado(envioId, nuevoEstado) {
-        const confirmMsg = nuevoEstado === 'EN_RUTA' 
-            ? '¿Deseas poner este envío EN RUTA hacia su destino?' 
-            : '¿Confirmas que el paquete ha sido ENTREGADO al destinatario?';
-
-        if (!confirm(confirmMsg)) return;
-
-        try {
-            await http.patch(`/applications/apishipment/api/v1/envios/${envioId}/estado`, {
-                nuevoEstado: nuevoEstado,
-                observacion: `Cambio de estado realizado por ${user.username} a ${nuevoEstado}`
-            });
-
-            toast.success(`Envío actualizado al estado: ${nuevoEstado}`);
-            cargarEnvios();
-        } catch (err) {
-            console.error('Error cambiando estado:', err);
-        }
-    }
-
-    // Cancelar envío
-    async function cancelarEnvio(envioId, codigoSeguimiento) {
-        if (!confirm(`¿Estás seguro de cancelar el envío ${codigoSeguimiento}? Esta acción no se puede deshacer.`)) {
-            return;
-        }
-
-        try {
-            await http.patch(`/applications/apishipment/api/v1/envios/${envioId}/estado`, {
-                nuevoEstado: 'CANCELADO',
-                observacion: `Cancelado por el usuario ${user.username}`
-            });
-
-            toast.success(`El envío ${codigoSeguimiento} ha sido cancelado.`);
-            cargarEnvios();
-        } catch (err) {
-            console.error('Error cancelando envío:', err);
-        }
-    }
-
-    // Modal Asignar Repartidor
-    const modalAsignar = container.querySelector('#modal-asignar-repartidor');
-    const formAsignar = container.querySelector('#form-asignar-repartidor');
-    const selectRepartidores = container.querySelector('#asig-repartidor-select');
-    const lblAsigCodigo = container.querySelector('#asig-codigo-lbl');
-    const inputAsigEnvioId = container.querySelector('#asig-envio-id');
-
-    async function abrirModalAsignar(envioId, codigo) {
-        inputAsigEnvioId.value = envioId;
-        lblAsigCodigo.textContent = codigo;
-        selectRepartidores.innerHTML = '<option value="">Cargando repartidores disponibles...</option>';
-        modalAsignar.classList.remove('hidden');
-
-        try {
-            const repartidores = await http.get('/applications/apicourier/api/v1/repartidores/disponibles');
-            if (!Array.isArray(repartidores) || repartidores.length === 0) {
-                selectRepartidores.innerHTML = '<option value="">No hay repartidores disponibles en este momento</option>';
-                return;
-            }
-
-            selectRepartidores.innerHTML = `
-                <option value="">-- Selecciona un repartidor --</option>
-                ${repartidores.map(r => `
-                    <option value="${r.id}">${escapeHtml(r.nombre)} (${r.tipoVehiculo || 'Vehículo'}) - ACTIVO</option>
-                `).join('')}
-            `;
-        } catch (err) {
-            selectRepartidores.innerHTML = `<option value="">Error cargando repartidores</option>`;
-        }
-    }
-
-    formAsignar?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const envioId = inputAsigEnvioId.value;
-        const repartidorId = selectRepartidores.value;
-
-        if (!repartidorId) {
-            toast.warning('Por favor selecciona un repartidor.');
-            return;
-        }
-
-        try {
-            await http.patch(`/applications/apishipment/api/v1/envios/${envioId}/asignar-repartidor/${repartidorId}`);
-            toast.success('Repartidor asignado con éxito al envío.');
-            modalAsignar.classList.add('hidden');
-            cargarEnvios();
-        } catch (err) {
-            console.error('Error asignando repartidor:', err);
-        }
-    });
-
-    container.querySelector('#close-modal-asignar')?.addEventListener('click', () => modalAsignar.classList.add('hidden'));
-    container.querySelector('#cancel-asignar')?.addEventListener('click', () => modalAsignar.classList.add('hidden'));
-
-    // Modal Historial
-    const modalHistorial = container.querySelector('#modal-historial');
-    const timelineEl = container.querySelector('#historial-timeline');
-    const metaEl = container.querySelector('#historial-meta');
-
-    async function abrirModalHistorial(envioId, codigo) {
-        modalHistorial.classList.remove('hidden');
-        metaEl.innerHTML = `<p>Envío: <strong>${escapeHtml(codigo)}</strong></p>`;
-        timelineEl.innerHTML = '<p class="loading-text">Consultando historial de estados...</p>';
-
-        try {
-            const historial = await http.get(`/applications/apishipment/api/v1/envios/${envioId}/historial`);
-
-            if (!Array.isArray(historial) || historial.length === 0) {
-                timelineEl.innerHTML = '<p class="text-muted">Aún no hay cambios de estado registrados para este envío.</p>';
-                return;
-            }
-
-            timelineEl.innerHTML = historial.map((item, idx) => `
-                <div class="timeline-item">
-                    <div class="timeline-badge">${idx + 1}</div>
-                    <div class="timeline-content">
-                        <div class="timeline-header">
-                            <span class="timeline-transition">
-                                ${item.estadoAnterior ? `<span class="badge badge-sm">${item.estadoAnterior}</span> &rarr;` : ''} 
-                                <strong class="badge badge-sm ${getBadgeClass(item.estadoNuevo)}">${item.estadoNuevo}</strong>
-                            </span>
-                            <span class="timeline-date">${item.fechaCambio ? new Date(item.fechaCambio).toLocaleString() : 'Fecha desconocida'}</span>
-                        </div>
-                        ${item.observacion ? `<p class="timeline-obs">${escapeHtml(item.observacion)}</p>` : ''}
-                    </div>
-                </div>
-            `).join('');
-
-        } catch (err) {
-            timelineEl.innerHTML = `<p class="error-text">No se pudo cargar el historial: ${escapeHtml(err.message)}</p>`;
-        }
-    }
-
-    container.querySelector('#close-modal-historial')?.addEventListener('click', () => modalHistorial.classList.add('hidden'));
-    container.querySelector('#close-historial-btn')?.addEventListener('click', () => modalHistorial.classList.add('hidden'));
-
-    // Modal Nuevo Envío
+    // ============================================================
+    // PANTALLA 2: Registrar Envío (POST con Body JSON)
+    // ============================================================
     const modalNuevoEnvio = container.querySelector('#modal-nuevo-envio');
     const btnNuevoEnvio = container.querySelector('#btn-nuevo-envio');
     const formNuevoEnvio = container.querySelector('#form-nuevo-envio');
@@ -481,29 +424,329 @@ export function renderEnvios(container) {
         const ancho = parseFloat(container.querySelector('#env-ancho').value);
         const largo = parseFloat(container.querySelector('#env-largo').value);
 
-        const params = new URLSearchParams({
-            clienteId,
-            peso,
-            alto,
-            ancho,
-            largo
-        });
+        // Origen
+        const origen = {
+            calle: container.querySelector('#orig-calle').value.trim(),
+            numero: container.querySelector('#orig-numero').value.trim(),
+            ciudad: container.querySelector('#orig-ciudad').value.trim(),
+            codigoPostal: container.querySelector('#orig-cp').value.trim()
+        };
+
+        // Destino
+        const destino = {
+            calle: container.querySelector('#dest-calle').value.trim(),
+            numero: container.querySelector('#dest-numero').value.trim(),
+            ciudad: container.querySelector('#dest-ciudad').value.trim(),
+            codigoPostal: container.querySelector('#dest-cp').value.trim()
+        };
+
+        // Construcción del JSON Body según EnvioCreateRequestDto
+        const payload = {
+            clienteId: clienteId,
+            peso: peso,
+            largo: largo,
+            ancho: ancho,
+            alto: alto,
+            origen: origen,
+            destino: destino
+        };
 
         try {
-            const nuevo = await http.post(`/applications/apishipment/api/v1/envios?${params.toString()}`);
-            toast.success(`Envío ${nuevo ? nuevo.codigoSeguimiento : ''} creado correctamente.`);
+            const btnSubmit = formNuevoEnvio.querySelector('button[type="submit"]');
+            btnSubmit.disabled = true;
+            btnSubmit.textContent = 'Registrando...';
+
+            // POST con JSON en el Body a través del Gateway
+            const nuevo = await http.post('/applications/apishipment/api/v1/envios', payload);
+            
+            toast.success(`Envío ${nuevo && nuevo.codigoSeguimiento ? nuevo.codigoSeguimiento : ''} registrado con éxito.`);
             modalNuevoEnvio.classList.add('hidden');
             formNuevoEnvio.reset();
             cargarEnvios();
+
         } catch (err) {
             console.error('Error registrando envío:', err);
+            // http.js ya muestra toast de error con el mensaje de validación del backend
+        } finally {
+            const btnSubmit = formNuevoEnvio.querySelector('button[type="submit"]');
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.textContent = 'Guardar Envío';
+            }
         }
     });
 
-    // Carga inicial
+    // ============================================================
+    // PANTALLA 3: Detalle del Envío e Historial de Trazabilidad
+    // ============================================================
+    const modalDetalle = container.querySelector('#modal-detalle-envio');
+    const detTitulo = container.querySelector('#det-titulo');
+    const detContenido = container.querySelector('#det-contenido');
+
+    async function abrirModalDetalle(envioId) {
+        modalDetalle.classList.remove('hidden');
+        detContenido.innerHTML = `
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Cargando información del envío...</p>
+            </div>
+        `;
+
+        try {
+            // Consulta de detalle e historial en paralelo
+            const [envio, historial] = await Promise.all([
+                http.get(`/applications/apishipment/api/v1/envios/${envioId}`),
+                http.get(`/applications/apishipment/api/v1/envios/${envioId}/historial`).catch(() => [])
+            ]);
+
+            detTitulo.textContent = `🔍 Detalle del Envío ${envio.codigoSeguimiento || ''}`;
+
+            const tarifa = formatearMoneda(calcularTarifa(envio));
+            const estadoBadge = getBadgePorEstado(envio.estado);
+            const origenStr = formatearDireccion(envio.origen);
+            const destinoStr = formatearDireccion(envio.destino);
+
+            // Generar timeline de historial
+            let timelineHtml = '<p class="text-muted">Aún no hay cambios de estado registrados para este envío.</p>';
+            if (Array.isArray(historial) && historial.length > 0) {
+                timelineHtml = `
+                    <div class="timeline">
+                        ${historial.map((item, idx) => `
+                            <div class="timeline-item">
+                                <div class="timeline-badge">${idx + 1}</div>
+                                <div class="timeline-content">
+                                    <div class="timeline-header">
+                                        <span class="timeline-transition">
+                                            ${item.estadoAnterior ? `<span class="badge badge-sm">${escapeHtml(item.estadoAnterior)}</span> &rarr;` : ''} 
+                                            <strong class="badge badge-sm ${getBadgeClass(item.estadoNuevo)}">${escapeHtml(item.estadoNuevo)}</strong>
+                                        </span>
+                                        <span class="timeline-date">${item.fechaCambio ? new Date(item.fechaCambio).toLocaleString() : 'Fecha no registrada'}</span>
+                                    </div>
+                                    ${item.observacion ? `<p class="timeline-obs">${escapeHtml(item.observacion)}</p>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            detContenido.innerHTML = `
+                <div class="detail-grid">
+                    <!-- Caja 1: Información General -->
+                    <div class="detail-card-box">
+                        <h4>📦 Datos del Envío</h4>
+                        <div class="detail-row">
+                            <span class="detail-label">Código:</span>
+                            <span class="detail-value"><code>${escapeHtml(envio.codigoSeguimiento)}</code></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Estado actual:</span>
+                            <span class="detail-value">${estadoBadge}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Tarifa calculada:</span>
+                            <span class="detail-value"><span class="tarifa-badge">${tarifa}</span></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Dimensiones:</span>
+                            <span class="detail-value">${envio.largo || 0} x ${envio.ancho || 0} x ${envio.alto || 0} cm</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Peso:</span>
+                            <span class="detail-value">${envio.peso || 0} kg</span>
+                        </div>
+                    </div>
+
+                    <!-- Caja 2: Participantes -->
+                    <div class="detail-card-box">
+                        <h4>👤 Cliente y Repartidor</h4>
+                        <div class="detail-row">
+                            <span class="detail-label">Cliente:</span>
+                            <span class="detail-value">${envio.nombreCliente ? escapeHtml(envio.nombreCliente) : '<span class="text-muted">No indicado</span>'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Email Cliente:</span>
+                            <span class="detail-value">${envio.emailCliente ? escapeHtml(envio.emailCliente) : '<span class="text-muted">No indicado</span>'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">ID Cliente:</span>
+                            <span class="detail-value"><code class="uuid-chip">${envio.clienteId ? escapeHtml(envio.clienteId) : 'Sin ID'}</code></span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Repartidor Asignado:</span>
+                            <span class="detail-value">${envio.repartidorId ? `🛵 <code class="uuid-chip">${escapeHtml(envio.repartidorId)}</code>` : '<span class="text-muted">Sin repartidor</span>'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Caja 3: Rutas -->
+                <div class="detail-grid">
+                    <div class="detail-card-box">
+                        <h4>📍 Origen</h4>
+                        <p class="detail-address">${origenStr}</p>
+                    </div>
+                    <div class="detail-card-box">
+                        <h4>🏁 Destino</h4>
+                        <p class="detail-address">${destinoStr}</p>
+                    </div>
+                </div>
+
+                <!-- Caja 4: Historial de Trazabilidad -->
+                <div class="detail-card-box">
+                    <h4>📋 Historial de Estados</h4>
+                    ${timelineHtml}
+                </div>
+            `;
+
+        } catch (err) {
+            detContenido.innerHTML = `<p class="error-text">No se pudo cargar el detalle del envío: ${escapeHtml(err.message)}</p>`;
+        }
+    }
+
+    container.querySelector('#close-modal-detalle')?.addEventListener('click', () => modalDetalle.classList.add('hidden'));
+    container.querySelector('#close-detalle-btn')?.addEventListener('click', () => modalDetalle.classList.add('hidden'));
+
+    // ============================================================
+    // PANTALLA 4: Asignar Repartidor (Solo ADMIN)
+    // ============================================================
+    const modalAsignar = container.querySelector('#modal-asignar-repartidor');
+    const formAsignar = container.querySelector('#form-asignar-repartidor');
+    const selectRepartidores = container.querySelector('#asig-repartidor-select');
+    const lblAsigCodigo = container.querySelector('#asig-codigo-lbl');
+    const inputAsigEnvioId = container.querySelector('#asig-envio-id');
+
+    async function abrirModalAsignar(envioId, codigo) {
+        inputAsigEnvioId.value = envioId;
+        lblAsigCodigo.textContent = codigo;
+        selectRepartidores.innerHTML = '<option value="">Cargando repartidores disponibles...</option>';
+        modalAsignar.classList.remove('hidden');
+
+        try {
+            // Consulta de repartidores disponibles a Courier Service vía Gateway
+            const repartidores = await http.get('/applications/apicourier/api/v1/repartidores/disponibles');
+            if (!Array.isArray(repartidores) || repartidores.length === 0) {
+                selectRepartidores.innerHTML = '<option value="">No hay repartidores disponibles en este momento</option>';
+                return;
+            }
+
+            selectRepartidores.innerHTML = `
+                <option value="">-- Selecciona un repartidor activo --</option>
+                ${repartidores.map(r => `
+                    <option value="${r.id}">${escapeHtml(r.nombre)} (${escapeHtml(r.tipoVehiculo || 'Vehículo')}) - ACTIVO</option>
+                `).join('')}
+            `;
+        } catch (err) {
+            selectRepartidores.innerHTML = `<option value="">Error cargando repartidores desde Courier Service</option>`;
+        }
+    }
+
+    formAsignar?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const envioId = inputAsigEnvioId.value;
+        const repartidorId = selectRepartidores.value;
+
+        if (!repartidorId) {
+            toast.warning('Por favor selecciona un repartidor disponible.');
+            return;
+        }
+
+        try {
+            // Endpoint exacto: PATCH /applications/apishipment/api/v1/envios/{id}/asignar-repartidor/{rid}
+            await http.patch(`/applications/apishipment/api/v1/envios/${envioId}/asignar-repartidor/${repartidorId}`);
+            toast.success('Repartidor asignado con éxito al envío.');
+            modalAsignar.classList.add('hidden');
+            cargarEnvios();
+        } catch (err) {
+            console.error('Error asignando repartidor:', err);
+        }
+    });
+
+    container.querySelector('#close-modal-asignar')?.addEventListener('click', () => modalAsignar.classList.add('hidden'));
+    container.querySelector('#cancel-asignar')?.addEventListener('click', () => modalAsignar.classList.add('hidden'));
+
+    // ============================================================
+    // PANTALLA 5: Cambiar Estado del Envío (PATCH /{id}/estado)
+    // Recorrido demostración: PENDIENTE -> EN_RUTA -> ENTREGADO
+    // ============================================================
+    async function transicionarEstado(envioId, nuevoEstado) {
+        const confirmMsg = nuevoEstado === 'EN_RUTA' 
+            ? '¿Confirmas poner este envío EN RUTA hacia el destino del cliente?' 
+            : '¿Confirmas que el paquete ha sido ENTREGADO al destinatario?';
+
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            await http.patch(`/applications/apishipment/api/v1/envios/${envioId}/estado`, {
+                nuevoEstado: nuevoEstado,
+                observacion: `Transición realizada por el usuario ${user.username} a estado ${nuevoEstado}`
+            });
+
+            toast.success(`Estado actualizado exitosamente a: ${nuevoEstado}`);
+            cargarEnvios();
+        } catch (err) {
+            console.error('Error cambiando estado del envío:', err);
+        }
+    }
+
+    // ============================================================
+    // PANTALLA 6: Cancelar Envío (POST /{id}/cancelar con manejo de 409)
+    // ============================================================
+    async function cancelarEnvio(envioId, codigoSeguimiento) {
+        if (!confirm(`¿Estás seguro de cancelar el envío ${codigoSeguimiento}? Esta acción es irreversible.`)) {
+            return;
+        }
+
+        try {
+            // Endpoint exacto requerido: POST /applications/apishipment/api/v1/envios/{id}/cancelar
+            await http.post(`/applications/apishipment/api/v1/envios/${envioId}/cancelar`);
+            toast.success(`El envío ${codigoSeguimiento} ha sido cancelado.`);
+            cargarEnvios();
+
+        } catch (err) {
+            console.error('Error cancelando envío:', err);
+            // Si el backend devuelve 409 Conflict, http.js ya lanzó el error con err.status = 409
+            if (err.status === 409) {
+                toast.warning(`Conflicto (409): No se puede cancelar el envío porque ya no se encuentra en estado PENDIENTE.`);
+            }
+            // Sincronizar de todos modos la lista para refrescar el estado real
+            cargarEnvios();
+        }
+    }
+
+    // Carga inicial al montar la vista
     cargarEnvios();
 }
 
+// ============================================================
+// FUNCIONES AUXILIARES DE FORMATEO Y SEGURIDAD
+// ============================================================
+
+/**
+ * Calcula la tarifa estimada o devuelve la fijada por el backend.
+ * Fórmula oficial: base 1000 + (peso * 200) + (largo * ancho * alto * 0.1)
+ */
+function calcularTarifa(envio) {
+    if (envio.tarifa != null && envio.tarifa > 0) {
+        return envio.tarifa;
+    }
+    const peso = Number(envio.peso) || 0;
+    const largo = Number(envio.largo) || 0;
+    const ancho = Number(envio.ancho) || 0;
+    const alto = Number(envio.alto) || 0;
+    const tarifa = 1000.0 + (peso * 200.0) + (largo * ancho * alto * 0.1);
+    return Math.round(tarifa * 100) / 100;
+}
+
+/**
+ * Formatea un número como moneda argentina ($ ARS).
+ */
+function formatearMoneda(monto) {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(monto);
+}
+
+/**
+ * Genera el Badge visual según el estado del envío.
+ */
 function getBadgePorEstado(estado) {
     const estadoStr = String(estado || 'PENDIENTE').toUpperCase();
     const map = {
@@ -526,9 +769,26 @@ function getBadgeClass(estado) {
     return map[estadoStr] || 'badge-default';
 }
 
+/**
+ * Formatea un objeto Direccion a texto legible y seguro.
+ */
+function formatearDireccion(dir) {
+    if (!dir) return '<span class="text-muted">No especificada</span>';
+    const partes = [];
+    if (dir.calle) {
+        partes.push(`${escapeHtml(dir.calle)} ${dir.numero ? escapeHtml(String(dir.numero)) : ''}`.trim());
+    }
+    if (dir.ciudad) partes.push(escapeHtml(dir.ciudad));
+    if (dir.codigoPostal) partes.push(`(CP ${escapeHtml(String(dir.codigoPostal))})`);
+    return partes.join(', ') || '<span class="text-muted">No especificada</span>';
+}
+
+/**
+ * Sanitiza texto para evitar inyecciones HTML / XSS.
+ */
 function escapeHtml(str) {
     if (!str) return '';
     const d = document.createElement('div');
-    d.textContent = str;
+    d.textContent = String(str);
     return d.innerHTML;
 }
